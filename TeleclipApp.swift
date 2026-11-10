@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Vision
+import ServiceManagement
 
 // ============================================================
 // Teleclip (메뉴바 앱)
@@ -97,6 +98,7 @@ final class HotKeys {
 // ---- 메뉴바 앱 ----
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
+    var loginMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -108,6 +110,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "캡처 → 클립보드 (공백)   ⌃⇧2", action: #selector(capSpace), keyEquivalent: "")
         menu.addItem(withTitle: "캡처 → 클립보드 (탭)     ⌃⇧3", action: #selector(capTab), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
+
+        let login = NSMenuItem(title: "로그인 시 자동 실행", action: #selector(toggleLogin), keyEquivalent: "")
+        menu.addItem(login)
+        loginMenuItem = login
+        updateLoginState()
+
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "종료", action: #selector(quit), keyEquivalent: "q")
         for it in menu.items { it.target = self }
         statusItem.menu = menu
@@ -118,6 +127,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func capSpace() { DispatchQueue.global().async { captureAndCopy(tab: false) } }
     @objc func capTab()   { DispatchQueue.global().async { captureAndCopy(tab: true) } }
     @objc func quit()     { NSApp.terminate(nil) }
+
+    // ---- 로그인 항목 토글 (macOS 13+) ----
+    @objc func toggleLogin() {
+        guard #available(macOS 13.0, *) else {
+            alert("로그인 시 자동 실행은 macOS 13 이상에서 지원됩니다.")
+            return
+        }
+        do {
+            if SMAppService.mainApp.status == .enabled {
+                try SMAppService.mainApp.unregister()
+            } else {
+                try SMAppService.mainApp.register()
+            }
+        } catch {
+            alert("자동 실행 설정 실패: \(error.localizedDescription)")
+        }
+        updateLoginState()
+    }
+
+    func updateLoginState() {
+        guard let item = loginMenuItem else { return }
+        if #available(macOS 13.0, *) {
+            item.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
+        } else {
+            item.isEnabled = false
+        }
+    }
+
+    func alert(_ msg: String) {
+        let a = NSAlert()
+        a.messageText = "Teleclip"
+        a.informativeText = msg
+        a.runModal()
+    }
 }
 
 let app = NSApplication.shared
