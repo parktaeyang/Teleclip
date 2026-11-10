@@ -1,0 +1,6 @@
+# 빌드 산출물
+Teleclip.app/
+teleclip
+
+# macOS
+.DS_Store
