@@ -7,8 +7,12 @@ APP="Teleclip.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 
-# 1) 컴파일
-swiftc -O TeleclipApp.swift -o "$APP/Contents/MacOS/Teleclip" -framework Carbon
+# 1) 컴파일 (유니버설: Apple Silicon + Intel)
+mkdir -p build
+swiftc -O TeleclipApp.swift -o build/Teleclip-arm64  -target arm64-apple-macos13  -framework Carbon
+swiftc -O TeleclipApp.swift -o build/Teleclip-x86_64 -target x86_64-apple-macos13 -framework Carbon
+lipo -create -output "$APP/Contents/MacOS/Teleclip" build/Teleclip-arm64 build/Teleclip-x86_64
+rm -rf build
 
 # 2) Info.plist (안정적인 번들 ID → 화면 기록 권한이 기억됨)
 cat > "$APP/Contents/Info.plist" <<'PLIST'

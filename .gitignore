@@ -1,6 +1,8 @@
 # 빌드 산출물
 Teleclip.app/
 teleclip
+Teleclip.dmg
+build/
 
 # macOS
 .DS_Store
