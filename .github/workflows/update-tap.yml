@@ -1,8 +1,6 @@
 # 릴리스 자산을 검증한 뒤 parktaeyang/homebrew-tap 의 Casks/teleclip.rb 를 갱신한다 (직접 push).
 # 트리거: release.yml 이 호출(workflow_call) / 웹에서 수동 publish 한 릴리스(release: published) / 수동 실행.
 # 같은 버전·같은 체크섬이면 아무것도 하지 않으므로 겹쳐서 실행돼도 안전하다.
-#
-# 참고: 별도 update-tap 워크플로 구조는 codingnoye/gksdud (Apache-2.0) 를 참고해 새로 작성했다.
 name: Update Homebrew tap
 
 on:

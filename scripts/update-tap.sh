@@ -18,10 +18,6 @@
 # 거부하는 경우 (비0 종료): 형식이 틀린 태그 / 자산 누락 / SHA256SUMS 불일치 / zip 안 버전·번들 ID 불일치 /
 #   서명 검증 실패 / 인증서로 고정되지 않은 서명(ad-hoc) / 다운그레이드 / 같은 버전인데 체크섬이 다른 경우.
 # 같은 버전·같은 체크섬이면 아무것도 하지 않고 성공(0)한다 (멱등).
-#
-# 참고: "자산·체크섬·zip 안 Info.plist·다운그레이드를 확인한 뒤 cask를 갱신"하는 흐름은
-#       codingnoye/gksdud (Apache-2.0) 의 scripts/update-tap.py 를 참고해 새로 작성했다.
-#       (코드는 복사하지 않았고, PR 대신 직접 push 하는 점 등이 다르다.)
 set -euo pipefail
 
 SRC_REPO="${GITHUB_REPOSITORY:-parktaeyang/Teleclip}"

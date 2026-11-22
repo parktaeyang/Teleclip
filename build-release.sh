@@ -3,9 +3,6 @@
 #
 # build-app.sh 를 먼저 실행하므로 같은 환경변수(TELECLIP_VERSION, TELECLIP_SIGN_MODE 등)를 그대로 쓴다.
 # 서명 모드와 identity는 빌드된 앱의 서명에서 읽는다 (ad-hoc이면 DMG는 서명하지 않음).
-#
-# 참고: 배포물 구성(버전 붙은 zip + DMG + 체크섬, ditto 압축)은 codingnoye/gksdud (Apache-2.0) 의
-#       build.sh 흐름을 참고해 새로 작성했다.
 set -e
 cd "$(dirname "$0")"
 

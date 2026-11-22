@@ -1,6 +1,5 @@
 #!/bin/zsh
 # Teleclip.app 메뉴바 앱 빌드 스크립트
-# (서명 모드 구성: codingnoye/gksdud (Apache-2.0) 의 build.sh 를 참고해 새로 작성)
 #
 # 환경변수
 #   TELECLIP_VERSION   앱 버전 (기본 1.0, 형식 N.N 또는 N.N.N)
