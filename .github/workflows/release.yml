@@ -150,6 +150,7 @@ jobs:
 
       - name: Remove temporary keychain
         if: always()
+        timeout-minutes: 2
         run: |
           KEYCHAIN="$RUNNER_TEMP/teleclip-signing.keychain-db"
           rm -f "$RUNNER_TEMP/teleclip-signing.p12"
@@ -162,7 +163,8 @@ jobs:
           if [[ -f "$KEYCHAIN" ]]; then
             security delete-keychain "$KEYCHAIN" || echo "::warning::임시 키체인 삭제 실패 (일회용 러너라 폐기됩니다)"
           fi
-          sudo security remove-trusted-cert -d signing/teleclip-local-signing.pem 2>/dev/null || true
+          # 신뢰 설정은 제거하지 않는다: `remove-trusted-cert`는 sudo로도 GUI 인증 창을 기다리며 멈춘다
+          # (2026-11-22 CI에서 확인). 일회용 러너라 작업이 끝나면 통째로 폐기된다.
 
   # GITHUB_TOKEN으로 만든 릴리스는 `release: published` 워크플로를 트리거하지 않으므로 직접 호출한다.
   update-tap:
