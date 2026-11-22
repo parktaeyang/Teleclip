@@ -1,0 +1,13 @@
+[ req ]
+distinguished_name = dn
+x509_extensions    = v3_codesign
+prompt             = no
+
+[ dn ]
+CN = Teleclip Local Signing (parktaeyang)
+
+[ v3_codesign ]
+basicConstraints   = critical, CA:FALSE
+keyUsage           = critical, digitalSignature
+extendedKeyUsage   = critical, codeSigning
+subjectKeyIdentifier = hash

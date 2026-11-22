@@ -6,3 +6,12 @@ build/
 
 # macOS
 .DS_Store
+
+# 로컬 노트 (옵시디언 볼트 연동)
+local-notes/
+
+# 서명 개인키/인증서 묶음 (공개 인증서 .pem만 커밋)
+*.p12
+*.key
+signing/*.p12
+dist/

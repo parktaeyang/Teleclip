@@ -1,0 +1,177 @@
+# v로 시작하는 태그(v1.1.0 등)를 푸시하면 서명·빌드 → 릴리스(zip, dmg, SHA256SUMS) → tap 갱신.
+#
+# 참고: 임시 키체인 import + 지문 검증 + 릴리스 직후 tap 갱신 호출 구조는
+#       codingnoye/gksdud (Apache-2.0) 의 release.yml 을 참고해 새로 작성했다.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # 빌드 전용: 릴리스·tap 갱신 없이 빌드/서명만 해서 dist/ 를 artifact 로 올린다 (태그 전에 CI 서명을 시험하는 용도)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '빌드할 버전 (예: 1.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    outputs:
+      signed: ${{ steps.keychain.outputs.signed }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate tag and extract version
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" == workflow_dispatch ]]; then TAG="v${INPUT_VERSION#v}"; else TAG="$REF_NAME"; fi
+          if [[ ! "$TAG" =~ ^v[0-9]+(\.[0-9]+){1,2}$ ]]; then
+            echo "::error::태그/버전 형식이 올바르지 않습니다: $TAG (예: v1.1.0)"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Import signing identity into a temporary keychain
+        id: keychain
+        env:
+          P12_BASE64: ${{ secrets.TELECLIP_SIGNING_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.TELECLIP_SIGNING_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$P12_BASE64" || -z "$P12_PASSWORD" ]]; then
+            echo "::warning::서명 secret(TELECLIP_SIGNING_P12_BASE64/PASSWORD)이 없어 ad-hoc으로 빌드합니다. brew tap 갱신은 건너뜁니다."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          umask 077
+          KEYCHAIN="$RUNNER_TEMP/teleclip-signing.keychain-db"
+          P12="$RUNNER_TEMP/teleclip-signing.p12"
+          KEYCHAIN_PW="$(openssl rand -hex 32)"
+          echo "::add-mask::$KEYCHAIN_PW"
+          printf '%s' "$P12_BASE64" | base64 --decode > "$P12"
+          security list-keychains -d user | sed 's/^[[:space:]]*"//; s/"$//' > "$RUNNER_TEMP/keychains.orig"
+          security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security import "$P12" -P "$P12_PASSWORD" -k "$KEYCHAIN" -T /usr/bin/codesign
+          rm -f "$P12"
+
+          # 커밋된 공개 인증서의 지문과 같은 identity인지 확인 (다르면 릴리스 거부)
+          EXPECTED="$(openssl x509 -in signing/teleclip-local-signing.pem -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')"
+          IMPORTED="$(security find-certificate -c 'Teleclip Local Signing' -p "$KEYCHAIN" | openssl x509 -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')"
+          if [[ -z "$IMPORTED" || "$IMPORTED" != "$EXPECTED" ]]; then
+            echo "::error::import한 인증서 지문이 signing/teleclip-local-signing.pem 과 다릅니다. 릴리스를 거부합니다."
+            exit 1
+          fi
+
+          # 일회용 러너 한정: 코드 서명 용도로만 신뢰 (TLS 신뢰 아님)
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k "$KEYCHAIN" signing/teleclip-local-signing.pem
+          # 서명 시 키체인 접근 프롬프트로 멈추지 않도록 partition list 설정
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PW" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          IDENTITIES="$(security find-identity -v -p codesigning "$KEYCHAIN")"
+          if ! grep -q "$EXPECTED" <<< "$IDENTITIES"; then
+            echo "::error::키체인에서 코드 서명 identity를 찾지 못했습니다."
+            exit 1
+          fi
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build release artifacts
+        env:
+          TELECLIP_VERSION: ${{ steps.version.outputs.version }}
+          TELECLIP_SIGN_MODE: ${{ steps.keychain.outputs.signed == 'true' && 'local' || 'ad-hoc' }}
+        run: ./build-release.sh
+
+      - name: Upload build artifacts (build-only run)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: teleclip-dist-${{ steps.version.outputs.version }}
+          path: dist/
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SIGNED: ${{ steps.keychain.outputs.signed }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          화면 영역을 OCR로 읽어 클립보드에 넣는 메뉴바 앱.
+
+          ## 설치 (Homebrew)
+          ```sh
+          brew install --cask parktaeyang/tap/teleclip
+          ```
+
+          ## 설치 (직접 다운로드)
+          1. `Teleclip-__VERSION__.dmg` 를 열고 **Teleclip.app** 을 **Applications** 로 드래그
+
+          ## 첫 실행
+          자체 서명이고 Apple 공증을 받지 않은 앱이라 첫 실행이 막힐 수 있습니다.
+          - macOS 15 이상: 열어 본 뒤 **시스템 설정 → 개인정보 보호 및 보안 → "그래도 열기"**
+          - macOS 14 이하: Applications에서 **우클릭 → 열기** (보조 방법)
+          - 이어서 안내 창에서 **화면 기록 권한**을 허용하고, 메뉴바 아이콘의 **다시 시작**을 누르세요.
+
+          ## 1.0에서 업데이트하는 경우
+          번들 ID가 바뀌었습니다. 로그인 시 자동 실행을 다시 켜고, 화면 기록 목록의 옛 항목은 지워도 됩니다
+          (`tccutil reset ScreenCapture com.teleclip.app`).
+
+          ## 사용
+          - `⌃⇧2` 캡처 → 공백 구분으로 클립보드
+          - `⌃⇧3` 캡처 → 탭 구분으로 클립보드 (엑셀·시트용)
+          NOTES
+          sed -i '' "s/__VERSION__/$VERSION/g" "$RUNNER_TEMP/notes.md"
+          if [[ "$SIGNED" != "true" ]]; then
+            printf '\n> 주의: 이 릴리스는 ad-hoc 서명입니다. 업데이트할 때마다 화면 기록 권한을 다시 허용해야 합니다.\n' >> "$RUNNER_TEMP/notes.md"
+          fi
+          gh release create "$TAG" \
+            "dist/Teleclip-$VERSION.zip" "dist/Teleclip-$VERSION.dmg" dist/SHA256SUMS \
+            --title "Teleclip $TAG" --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: Remove temporary keychain
+        if: always()
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/teleclip-signing.keychain-db"
+          rm -f "$RUNNER_TEMP/teleclip-signing.p12"
+          # 검색 목록을 import 전 상태로 복원
+          if [[ -s "$RUNNER_TEMP/keychains.orig" ]]; then
+            ORIG=()
+            while IFS= read -r line; do if [[ -n "$line" ]]; then ORIG+=("$line"); fi; done < "$RUNNER_TEMP/keychains.orig"
+            security list-keychains -d user -s "${ORIG[@]}" || echo "::warning::키체인 검색 목록 복원 실패"
+          fi
+          if [[ -f "$KEYCHAIN" ]]; then
+            security delete-keychain "$KEYCHAIN" || echo "::warning::임시 키체인 삭제 실패 (일회용 러너라 폐기됩니다)"
+          fi
+          sudo security remove-trusted-cert -d signing/teleclip-local-signing.pem 2>/dev/null || true
+
+  # GITHUB_TOKEN으로 만든 릴리스는 `release: published` 워크플로를 트리거하지 않으므로 직접 호출한다.
+  update-tap:
+    needs: build
+    if: github.event_name == 'push' && needs.build.outputs.signed == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/update-tap.yml
+    with:
+      release_tag: ${{ needs.build.outputs.tag }}
+    secrets:
+      TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}

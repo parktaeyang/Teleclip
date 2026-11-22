@@ -1,17 +1,9 @@
 #!/bin/zsh
-# Teleclip.dmg 배포본 생성 (드래그하여 Applications에 설치)
+# 호환용 래퍼: 배포물(zip/dmg/SHA256SUMS) 생성은 build-release.sh 가 하고,
+# 예전 위치(저장소 루트의 Teleclip.dmg)에도 dmg 사본을 남긴다.
 set -e
 cd "$(dirname "$0")"
-
-./build-app.sh
-
-STAGING=$(mktemp -d)
-cp -R Teleclip.app "$STAGING/"
-ln -s /Applications "$STAGING/Applications"   # 드래그-설치용 심볼릭 링크
-
-rm -f Teleclip.dmg
-hdiutil create -volname "Teleclip" \
-  -srcfolder "$STAGING" -ov -format UDZO Teleclip.dmg >/dev/null
-rm -rf "$STAGING"
-
-echo "생성 완료: $(pwd)/Teleclip.dmg"
+./build-release.sh "$@"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Teleclip.app/Contents/Info.plist)"
+cp "dist/Teleclip-$VERSION.dmg" Teleclip.dmg
+echo "호환용 사본: $(pwd)/Teleclip.dmg"

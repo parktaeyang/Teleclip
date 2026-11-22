@@ -1,0 +1,58 @@
+# 릴리스 자산을 검증한 뒤 parktaeyang/homebrew-tap 의 Casks/teleclip.rb 를 갱신한다 (직접 push).
+# 트리거: release.yml 이 호출(workflow_call) / 웹에서 수동 publish 한 릴리스(release: published) / 수동 실행.
+# 같은 버전·같은 체크섬이면 아무것도 하지 않으므로 겹쳐서 실행돼도 안전하다.
+#
+# 참고: 별도 update-tap 워크플로 구조는 codingnoye/gksdud (Apache-2.0) 를 참고해 새로 작성했다.
+name: Update Homebrew tap
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: '릴리스 태그 (예: v1.1.0)'
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      release_tag:
+        description: '릴리스 태그 (예: v1.1.0)'
+        required: true
+        type: string
+    secrets:
+      TAP_GITHUB_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-homebrew-tap
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.event_name != 'release' || !github.event.release.prerelease
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # 서명 검증이 자체 서명 인증서를 신뢰하도록, 일회용 러너에서만 코드 서명 용도로 신뢰시킨다 (TLS 신뢰 아님).
+      - name: Trust pinned signing certificate (ephemeral runner)
+        run: sudo security add-trusted-cert -d -r trustRoot -p codeSign signing/teleclip-local-signing.pem
+
+      - name: Update tap cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          TELECLIP_TEAM_ID: ${{ vars.TELECLIP_TEAM_ID }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$TAP_GITHUB_TOKEN" ]]; then
+            echo "::warning::TAP_GITHUB_TOKEN secret이 없어 tap 갱신을 건너뜁니다 (릴리스 자체는 성공). parktaeyang/homebrew-tap 에 Contents write 권한이 있는 토큰을 등록하세요."
+            exit 0
+          fi
+          bash scripts/update-tap.sh "$RELEASE_TAG"

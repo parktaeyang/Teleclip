@@ -5,14 +5,39 @@
 클립보드 리디렉션이 막힌 VDI(Omnissa Horizon 등) 화면에서 텍스트를 가져오기 위해 만들었습니다.
 VDI 화면은 Mac 입장에서 '그림'일 뿐이라, 텍스트를 가져오는 방법은 OCR뿐입니다.
 
-## 다운로드 & 설치
+## 설치
 
-1. [**Releases**](https://github.com/parktaeyang/Teleclip/releases/latest) 에서 `Teleclip.dmg` 다운로드
+### Homebrew (권장)
+
+```sh
+brew install --cask parktaeyang/tap/teleclip     # 설치
+brew upgrade --cask teleclip                     # 업그레이드 (화면 기록 권한 유지)
+brew uninstall --zap --cask teleclip             # 삭제 (설정까지 제거)
+```
+
+이미 DMG로 설치한 `/Applications/Teleclip.app` 이 있으면 먼저 지우거나 `--force` 를 붙여 설치하세요.
+
+### DMG 직접 다운로드
+
+1. [**Releases**](https://github.com/parktaeyang/Teleclip/releases/latest) 에서 `Teleclip-<버전>.dmg` 다운로드
 2. DMG를 열고 **Teleclip.app** 을 **Applications** 폴더로 드래그
-3. 첫 실행은 Applications에서 **우클릭 → 열기** (확인되지 않은 개발자 경고를 1회 넘기기 위함)
-4. 처음 캡처 시 **시스템 설정 → 개인정보 보호 및 보안 → 화면 기록** 에서 Teleclip 허용
+
+### 첫 실행
+
+Teleclip은 **자체 서명**이고 Apple 공증을 받지 않았습니다. 그래서 첫 실행이 막힐 수 있습니다.
+
+- **macOS 15 이상**: 앱을 한 번 열어 본 뒤 **시스템 설정 → 개인정보 보호 및 보안**에서 **"그래도 열기"** 를 누릅니다.
+- macOS 14 이하: Applications에서 **우클릭 → 열기** 로도 됩니다 (보조 방법).
+
+이어서 안내 창이 뜨면 **화면 기록 권한**을 허용하고, 메뉴바 아이콘의 **"다시 시작 (권한 적용)"** 을 누르면 바로 쓸 수 있습니다.
+고정된 인증서로 서명하므로 업데이트해도 권한이 유지됩니다. (macOS 15 이상은 시스템이 주기적으로 화면 기록을 계속 허용할지 물을 수 있습니다.)
 
 > 메뉴바 아이콘 → **"로그인 시 자동 실행"** 을 켜두면 부팅 때 자동으로 뜹니다.
+
+### 1.0에서 업데이트하는 경우
+
+번들 ID가 `com.teleclip.app` → `io.github.parktaeyang.teleclip` 으로 바뀌었습니다. 로그인 시 자동 실행을 다시 켜고,
+화면 기록 목록의 옛 항목은 지워도 됩니다 (`tccutil reset ScreenCapture com.teleclip.app`).
 
 ## 동작
 
@@ -33,13 +58,17 @@ VDI 화면은 Mac 입장에서 '그림'일 뿐이라, 텍스트를 가져오는 
 ## 빌드 & 실행
 
 ```sh
-./build-app.sh      # Teleclip.app 빌드 (유니버설, ad-hoc 서명 포함)
-open Teleclip.app   # 실행 (메뉴바에 아이콘 표시)
-./build-dmg.sh      # 배포용 Teleclip.dmg 생성
+./build-app.sh       # Teleclip.app 빌드 (유니버설)
+open Teleclip.app    # 실행 (메뉴바에 아이콘 표시)
+./build-release.sh   # 배포물 생성: dist/Teleclip-<버전>.zip, .dmg, SHA256SUMS
 ```
 
-릴리스는 `v*` 태그를 푸시하면 GitHub Actions가 DMG를 빌드해 자동 첨부합니다
-(`git tag v1.0 && git push --tags`).
+환경변수: `TELECLIP_VERSION`(기본 `1.0`), `TELECLIP_SIGN_MODE`(`local` | `developer-id` | `ad-hoc`).
+지정하지 않으면 `signing/setup-local-signing.sh --create-and-trust` 로 만든 자체 서명 인증서가 키체인에 있을 때 `local`, 없으면 `ad-hoc`(업데이트마다 권한 재허용 필요)으로 빌드합니다.
+인증서(개인키)가 없는 환경에서도 `ad-hoc` 으로 빌드는 됩니다. 자세한 옵션은 `build-app.sh` 머리 주석을 보세요.
+
+릴리스는 `v1.1.0` 같은 태그를 푸시하면 GitHub Actions가 서명·빌드해 Release에 올리고, Homebrew tap(`parktaeyang/homebrew-tap`)의 cask를 자동 갱신합니다.
+(필요한 secret: `TELECLIP_SIGNING_P12_BASE64`, `TELECLIP_SIGNING_P12_PASSWORD`, `TAP_GITHUB_TOKEN`)
 
 CLI 단독 버전도 있습니다:
 
@@ -51,7 +80,7 @@ CLI 단독 버전도 있습니다:
 
 ## 권한
 
-처음 실행 시 **시스템 설정 → 개인정보 보호 및 보안 → 화면 기록**에서 Teleclip 허용이 필요할 수 있습니다.
+**시스템 설정 → 개인정보 보호 및 보안 → 화면 기록**에서 Teleclip 허용이 필요합니다. 처음 실행하면 안내 창이 열립니다.
 
 ## 설계 메모
 
@@ -60,4 +89,11 @@ CLI 단독 버전도 있습니다:
 
 ## 요구 사항
 
-macOS 12.0+
+macOS 13.0+
+
+## 라이선스 / 출처
+
+Teleclip은 [MIT 라이선스](LICENSE)입니다.
+
+서명·릴리스·Homebrew tap 갱신 흐름은 [codingnoye/gksdud](https://github.com/codingnoye/gksdud) (Apache-2.0)의 방식을 참고해서 새로 작성했습니다.
+자세한 내용은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 보세요.
